@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace 'com.example.catchthemoment'
-    compileSdk 32
+    compileSdk 34
 
     defaultConfig {
         applicationId "com.example.catchthemoment"
