@@ -1,10 +1,14 @@
 package com.example.catchthemoment
 
 import android.app.Activity
+import android.app.Service
+import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Bundle
+import android.os.IBinder
 import android.provider.MediaStore
 import android.view.LayoutInflater
 import android.view.View
@@ -14,13 +18,28 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import java.util.*
+
+class CatchMomentService : Service() {
+    override fun onCreate() {
+        super.onCreate()
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Добавьте код для обработки события "Поймать момент" здесь
+        // Этот код будет выполняться при запуске сервиса
+        return START_STICKY
+    }
+
+    override fun onBind(intent: Intent?): IBinder? {
+        return null
+    }
+}
+
 class MainActivity : AppCompatActivity() {
-
-    data class Moment(val photoUri: Uri, val text: String, val timestamp: Long)
-
     private lateinit var momentsList: MutableList<Moment>
     private lateinit var recyclerView: RecyclerView
     private lateinit var adapter: MomentsAdapter
+    private lateinit var sharedPreferences: SharedPreferences
 
     private val ONE_HOUR = 60 * 60 * 1000 // 1 час в миллисекундах
     private val ONE_DAY = 24 * ONE_HOUR // 1 день в миллисекундах
@@ -42,10 +61,15 @@ class MainActivity : AppCompatActivity() {
         val photoImageView = findViewById<ImageView>(R.id.photoImageView)
 
         photoImageView.setOnClickListener {
-            val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
-            intent.type = "image/*"
-            startActivityForResult(intent, PICK_IMAGE_REQUEST)
+            val pickIntent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
+            val captureIntent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
+
+            val chooser = Intent.createChooser(pickIntent, "Выберите изображение")
+            chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, arrayOf(captureIntent))
+
+            startActivityForResult(chooser, PICK_IMAGE_REQUEST)
         }
+
 
         readyButton.setOnClickListener {
             val text = textEditText.text.toString()
@@ -60,7 +84,16 @@ class MainActivity : AppCompatActivity() {
             // Очистить текстовое поле и сбросить изображение
             textEditText.text.clear()
             photoImageView.setImageURI(null)
+
+            // Сохраняем список моментов в SharedPreferences
+            saveMomentsToSharedPreferences()
         }
+
+        // Инициализация SharedPreferences
+        sharedPreferences = getSharedPreferences("MomentsPref", Context.MODE_PRIVATE)
+
+        // Восстановление списка моментов
+        restoreMomentsFromSharedPreferences()
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -74,7 +107,7 @@ class MainActivity : AppCompatActivity() {
             photoImageView.setImageURI(selectedImageUri)
         }
     }
-    // Создайте адаптер для RecyclerView
+
     inner class MomentsAdapter(private val momentsList: List<Moment>) :
         RecyclerView.Adapter<MomentsAdapter.MomentViewHolder>() {
 
@@ -114,4 +147,38 @@ class MainActivity : AppCompatActivity() {
         val currentTime = System.currentTimeMillis()
         return currentTime - timestamp
     }
+
+    // Сохранение списка моментов в SharedPreferences
+    private fun saveMomentsToSharedPreferences() {
+        val editor = sharedPreferences.edit()
+        editor.clear()
+        for ((index, moment) in momentsList.withIndex()) {
+            editor.putString("moment_photo_uri_$index", moment.photoUri.toString())
+            editor.putString("moment_text_$index", moment.text)
+            editor.putLong("moment_timestamp_$index", moment.timestamp)
+        }
+        editor.apply()
+    }
+
+    // Восстановление списка моментов из SharedPreferences
+    private fun restoreMomentsFromSharedPreferences() {
+        momentsList.clear()
+        var index = 0
+        while (true) {
+            val photoUri = sharedPreferences.getString("moment_photo_uri_$index", null)
+            if (photoUri == null) {
+                break
+            }
+            val text = sharedPreferences.getString("moment_text_$index", "") ?: ""
+            val timestamp = sharedPreferences.getLong("moment_timestamp_$index", 0L)
+            if (!photoUri.isNullOrEmpty()) {
+                momentsList.add(Moment(Uri.parse(photoUri), text, timestamp))
+            }
+            index++
+        }
+        adapter.notifyDataSetChanged()
+    }
 }
+
+data class Moment(val photoUri: Uri, val text: String, val timestamp: Long)
+
