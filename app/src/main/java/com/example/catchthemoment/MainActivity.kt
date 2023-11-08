@@ -1,39 +1,80 @@
 package com.example.catchthemoment
 
-import android.app.Activity
-import android.app.Service
+import android.app.*
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
-import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Bundle
+import android.os.Environment
 import android.os.IBinder
 import android.provider.MediaStore
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.*
+import android.widget.EditText
+import android.widget.ImageButton
+import android.widget.ImageView
+import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.NotificationCompat
+import androidx.core.content.FileProvider
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import java.io.File
+import java.text.SimpleDateFormat
 import java.util.*
 
 class CatchMomentService : Service() {
+    private val CHANNEL_ID = "CatchMomentChannel"
+
     override fun onCreate() {
         super.onCreate()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Создать и отобразить уведомление
+        createNotificationChannel()
+        val notification = createNotification()
+        startForeground(1, notification)
+
         // Добавьте код для обработки события "Поймать момент" здесь
-        // Этот код будет выполняться при запуске сервиса
+
         return START_STICKY
+    }
+
+    private fun createNotificationChannel() {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                "Catch The Moment",
+                NotificationManager.IMPORTANCE_DEFAULT
+            )
+            val notificationManager = getSystemService(NotificationManager::class.java)
+            notificationManager.createNotificationChannel(channel)
+        }
+    }
+
+    private fun createNotification(): Notification {
+        val notificationIntent = Intent(this, MainActivity::class.java)
+        val pendingIntent = PendingIntent.getActivity(
+            this, 0, notificationIntent, 0
+        )
+
+        return NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle(getString(R.string.notification_title))
+            .setContentText(getString(R.string.notification_text))
+            .setSmallIcon(R.drawable.ic_notification_icon)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+            .build()
     }
 
     override fun onBind(intent: Intent?): IBinder? {
         return null
     }
 }
+
 
 class MainActivity : AppCompatActivity() {
     private lateinit var momentsList: MutableList<Moment>
@@ -45,6 +86,7 @@ class MainActivity : AppCompatActivity() {
     private val ONE_DAY = 24 * ONE_HOUR // 1 день в миллисекундах
     private val PICK_IMAGE_REQUEST = 1 // Любое уникальное целочисленное значение
     private var selectedImageUri: Uri? = null
+    private var imageFile: File? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -64,12 +106,19 @@ class MainActivity : AppCompatActivity() {
             val pickIntent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
             val captureIntent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
 
+            imageFile = createImageFile()
+            if (imageFile != null) {
+                captureIntent.putExtra(
+                    MediaStore.EXTRA_OUTPUT,
+                    FileProvider.getUriForFile(this, applicationContext.packageName + ".provider", imageFile!!)
+                )
+            }
+
             val chooser = Intent.createChooser(pickIntent, "Выберите изображение")
             chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, arrayOf(captureIntent))
 
             startActivityForResult(chooser, PICK_IMAGE_REQUEST)
         }
-
 
         readyButton.setOnClickListener {
             val text = textEditText.text.toString()
@@ -96,19 +145,28 @@ class MainActivity : AppCompatActivity() {
         restoreMomentsFromSharedPreferences()
     }
 
+    // Создаем временный файл для хранения снимка
+    private fun createImageFile(): File? {
+        val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+        val imageFileName = "JPEG_" + timeStamp + "_"
+        val storageDir = getExternalFilesDir(Environment.DIRECTORY_PICTURES)
+        return File.createTempFile(imageFileName, ".jpg", storageDir)
+    }
+
+    // В методе onActivityResult устанавливаем изображение сразу в ImageView
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == PICK_IMAGE_REQUEST && resultCode == Activity.RESULT_OK) {
-            // Получить URI выбранного изображения
-            selectedImageUri = data?.data
 
-            // Установить выбранное изображение в photoImageView
-            val photoImageView = findViewById<ImageView>(R.id.photoImageView)
-            photoImageView.setImageURI(selectedImageUri)
+        if (requestCode == PICK_IMAGE_REQUEST && resultCode == Activity.RESULT_OK) {
+            if (imageFile != null) {
+                val selectedImageUri = Uri.fromFile(imageFile)
+                val photoImageView = findViewById<ImageView>(R.id.photoImageView)
+                photoImageView.setImageURI(selectedImageUri)
+            }
         }
     }
 
-    inner class MomentsAdapter(private val momentsList: List<Moment>) :
+    inner class MomentsAdapter(private val momentsList: MutableList<Moment>) :
         RecyclerView.Adapter<MomentsAdapter.MomentViewHolder>() {
 
         inner class MomentViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
@@ -126,8 +184,8 @@ class MainActivity : AppCompatActivity() {
         override fun onBindViewHolder(holder: MomentViewHolder, position: Int) {
             val moment = momentsList[position]
             holder.photoImageView.setImageURI(moment.photoUri)
-            holder.textView.text = moment.text
 
+            // Проверяем, что момент был создан больше часа назад
             val timeAgo = calculateTimeAgo(moment.timestamp)
             if (timeAgo >= ONE_HOUR) {
                 holder.indicatorImageView.setImageResource(R.drawable.yellow_indicator)
@@ -181,4 +239,3 @@ class MainActivity : AppCompatActivity() {
 }
 
 data class Moment(val photoUri: Uri, val text: String, val timestamp: Long)
-

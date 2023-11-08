@@ -2,4 +2,6 @@
     <string name="app_name">CatchTheMoment</string>
     <string name="inputText">Введите текст</string>
     <string name="done">Готово</string>
+    <string name="notification_title">Catch The Moment</string>
+    <string name="notification_text">Поймать момент</string>
 </resources>
