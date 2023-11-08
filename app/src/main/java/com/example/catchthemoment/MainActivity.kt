@@ -2,8 +2,10 @@ package com.example.catchthemoment
 
 import android.app.Activity
 import android.content.Intent
+import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Bundle
+import android.provider.MediaStore
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -12,8 +14,10 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import java.util.*
-
 class MainActivity : AppCompatActivity() {
+
+    data class Moment(val photoUri: Uri, val text: String, val timestamp: Long)
+
     private lateinit var momentsList: MutableList<Moment>
     private lateinit var recyclerView: RecyclerView
     private lateinit var adapter: MomentsAdapter
@@ -21,7 +25,7 @@ class MainActivity : AppCompatActivity() {
     private val ONE_HOUR = 60 * 60 * 1000 // 1 час в миллисекундах
     private val ONE_DAY = 24 * ONE_HOUR // 1 день в миллисекундах
     private val PICK_IMAGE_REQUEST = 1 // Любое уникальное целочисленное значение
-
+    private var selectedImageUri: Uri? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -38,27 +42,14 @@ class MainActivity : AppCompatActivity() {
         val photoImageView = findViewById<ImageView>(R.id.photoImageView)
 
         photoImageView.setOnClickListener {
-            val intent = Intent(Intent.ACTION_PICK)
+            val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
             intent.type = "image/*"
             startActivityForResult(intent, PICK_IMAGE_REQUEST)
-        }
-        fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-            super.onActivityResult(requestCode, resultCode, data)
-
-            if (requestCode == PICK_IMAGE_REQUEST && resultCode == Activity.RESULT_OK) {
-                // Получить URI выбранного изображения
-                val selectedImageUri = data?.data
-
-                // Установить выбранное изображение в photoImageView
-                photoImageView.setImageURI(selectedImageUri)
-            }
         }
 
         readyButton.setOnClickListener {
             val text = textEditText.text.toString()
             val timestamp = System.currentTimeMillis()
-            val selectedImageUri: Uri? = null
-            // Здесь должен быть код для получения выбранной фотографии
 
             val moment = selectedImageUri?.let { Moment(it, text, timestamp) }
             if (moment != null) {
@@ -66,13 +57,23 @@ class MainActivity : AppCompatActivity() {
                 adapter.notifyItemInserted(momentsList.size - 1)
             }
 
-    // Очистить текстовое поле и сбросить изображение
+            // Очистить текстовое поле и сбросить изображение
             textEditText.text.clear()
             photoImageView.setImageURI(null)
-
         }
     }
 
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == PICK_IMAGE_REQUEST && resultCode == Activity.RESULT_OK) {
+            // Получить URI выбранного изображения
+            selectedImageUri = data?.data
+
+            // Установить выбранное изображение в photoImageView
+            val photoImageView = findViewById<ImageView>(R.id.photoImageView)
+            photoImageView.setImageURI(selectedImageUri)
+        }
+    }
     // Создайте адаптер для RecyclerView
     inner class MomentsAdapter(private val momentsList: List<Moment>) :
         RecyclerView.Adapter<MomentsAdapter.MomentViewHolder>() {
@@ -114,5 +115,3 @@ class MainActivity : AppCompatActivity() {
         return currentTime - timestamp
     }
 }
-
-
