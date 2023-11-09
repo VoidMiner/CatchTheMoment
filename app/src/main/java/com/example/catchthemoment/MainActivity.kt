@@ -9,13 +9,11 @@ import android.os.Bundle
 import android.os.Environment
 import android.os.IBinder
 import android.provider.MediaStore
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.EditText
-import android.widget.ImageButton
-import android.widget.ImageView
-import android.widget.TextView
+import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.NotificationCompat
 import androidx.core.content.FileProvider
@@ -27,10 +25,6 @@ import java.util.*
 
 class CatchMomentService : Service() {
     private val CHANNEL_ID = "CatchMomentChannel"
-
-    override fun onCreate() {
-        super.onCreate()
-    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // Создать и отобразить уведомление
@@ -87,6 +81,7 @@ class MainActivity : AppCompatActivity() {
     private val PICK_IMAGE_REQUEST = 1 // Любое уникальное целочисленное значение
     private var selectedImageUri: Uri? = null
     private var imageFile: File? = null
+    private var newestFirst = false // Переменная для отслеживания состояния чекбокса
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -102,15 +97,40 @@ class MainActivity : AppCompatActivity() {
         val textEditText = findViewById<EditText>(R.id.textEditText)
         val photoImageView = findViewById<ImageView>(R.id.photoImageView)
 
+        // Задание 6
+        val newestFirstCheckbox: CheckBox = findViewById(R.id.newestFirstCheckbox)
+
+        // Установка слушателя изменения состояния чекбокса
+        newestFirstCheckbox.setOnCheckedChangeListener { _, isChecked ->
+            newestFirst = isChecked
+            // Вызов метода для обновления порядка отображения списка моментов
+            updateMomentsOrder()
+        }
+        // Получение ссылки на чекбокс из макета
+        val startOnBootCheckbox: CheckBox = findViewById(R.id.startOnBootCheckbox)
+
+        // Установка слушателя изменения состояния чекбокса
+        startOnBootCheckbox.setOnCheckedChangeListener { _, isChecked ->
+            val sharedPreferences = getSharedPreferences("MomentsPref", Context.MODE_PRIVATE)
+            val editor = sharedPreferences.edit()
+            editor.putBoolean("startOnBoot", isChecked)
+            editor.apply()
+        }
+
         photoImageView.setOnClickListener {
-            val pickIntent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
+            val pickIntent =
+                Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
             val captureIntent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
 
             imageFile = createImageFile()
             if (imageFile != null) {
                 captureIntent.putExtra(
                     MediaStore.EXTRA_OUTPUT,
-                    FileProvider.getUriForFile(this, applicationContext.packageName + ".provider", imageFile!!)
+                    FileProvider.getUriForFile(
+                        this,
+                        applicationContext.packageName + ".provider",
+                        imageFile!!
+                    )
                 )
             }
 
@@ -127,6 +147,8 @@ class MainActivity : AppCompatActivity() {
             val moment = selectedImageUri?.let { Moment(it, text, timestamp) }
             if (moment != null) {
                 momentsList.add(moment)
+                Log.d("MainActivity", "Момент добавлен в список: $moment")
+                adapter.notifyDataSetChanged()
                 adapter.notifyItemInserted(momentsList.size - 1)
             }
 
@@ -143,6 +165,14 @@ class MainActivity : AppCompatActivity() {
 
         // Восстановление списка моментов
         restoreMomentsFromSharedPreferences()
+    }
+
+    private fun updateMomentsOrder() {
+        // Если нужно сначала новые, переверните список momentsList
+        if (newestFirst) {
+            momentsList.reverse()
+        }
+        adapter.notifyDataSetChanged()
     }
 
     // Создаем временный файл для хранения снимка
